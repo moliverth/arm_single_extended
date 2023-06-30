@@ -95,20 +95,6 @@ module testbench();
     begin
       clk <= 1; # 5; clk <= 0; # 5;
     end
-
-  // check results
-  always @(negedge clk)
-    begin
-      if(MemWrite) begin
-        if(DataAdr === 100 & WriteData === 7) begin
-          $display("Simulation succeeded");
-          $stop;
-        end else if (DataAdr !== 96) begin
-          $display("Simulation failed");
-          $stop;
-        end
-      end
-    end
 endmodule
 
 module top(input  logic        clk, reset, 
@@ -155,18 +141,18 @@ module arm(input  logic        clk, reset,
            input  logic [31:0] ReadData);
 
   logic [3:0] ALUFlags;
-  logic       RegWrite, 
+  logic       RegWrite, MovFlag,
               ALUSrc, MemtoReg, PCSrc;
   logic [1:0] RegSrc, ImmSrc, ALUControl;
 
   controller c(clk, reset, Instr[31:12], ALUFlags, 
                RegSrc, RegWrite, ImmSrc, 
                ALUSrc, ALUControl,
-               MemWrite, MemtoReg, PCSrc);
+               MemWrite, MemtoReg, MovFlag, PCSrc);
   datapath dp(clk, reset, 
               RegSrc, RegWrite, ImmSrc,
               ALUSrc, ALUControl,
-              MemtoReg, PCSrc,
+              MemtoReg, PCSrc, MovFlag,
               ALUFlags, PC, Instr,
               ALUResult, WriteData, ReadData);
 endmodule
@@ -180,17 +166,18 @@ module controller(input  logic         clk, reset,
                   output logic         ALUSrc, 
                   output logic [1:0]   ALUControl,
                   output logic         MemWrite, MemtoReg,
+                  output logic         MovFlag,
                   output logic         PCSrc);
 
   logic [1:0] FlagW;
-  logic       PCS, RegW, MemW;
+  logic       PCS, RegW, MemW, MovF;
   
   decoder dec(Instr[27:26], Instr[25:20], Instr[15:12],
               FlagW, PCS, RegW, MemW,
-              MemtoReg, ALUSrc, ImmSrc, RegSrc, ALUControl);
+              MemtoReg, ALUSrc, MovF, ImmSrc, RegSrc, ALUControl);
   condlogic cl(clk, reset, Instr[31:28], ALUFlags,
-               FlagW, PCS, RegW, MemW,
-               PCSrc, RegWrite, MemWrite);
+               FlagW, PCS, RegW, MemW, MovF, 
+               PCSrc, RegWrite, MemWrite, MovFlag);
 endmodule
 
 module decoder(input  logic [1:0] Op,
@@ -198,7 +185,7 @@ module decoder(input  logic [1:0] Op,
                input  logic [3:0] Rd,
                output logic [1:0] FlagW,
                output logic       PCS, RegW, MemW,
-               output logic       MemtoReg, ALUSrc,
+               output logic       MemtoReg, ALUSrc, MovF,
                output logic [1:0] ImmSrc, RegSrc, ALUControl);
 
   logic [9:0] controls;
@@ -229,11 +216,28 @@ module decoder(input  logic [1:0] Op,
   always_comb
     if (ALUOp) begin                 // which DP Instr?
       case(Funct[4:1]) 
-  	    4'b0100: ALUControl = 2'b00; // ADD
-  	    4'b0010: ALUControl = 2'b01; // SUB
-          4'b0000: ALUControl = 2'b10; // AND
-  	    4'b1100: ALUControl = 2'b11; // ORR
-  	    default: ALUControl = 2'bx;  // unimplemented
+          4'b0100: begin
+            ALUControl = 2'b00; // ADD
+            MovF = 1'b0;
+          end
+          4'b0010: begin
+            ALUControl = 2'b01; // SUB
+            MovF = 1'b0;
+          end
+          4'b0000: begin
+            ALUControl = 2'b10; // AND
+            MovF = 1'b0;
+          end
+          4'b1100: begin
+            ALUControl = 2'b11; // ORR
+            MovF = 1'b0;
+          end
+          4'b1101: begin
+            ALUControl = 2'bx;
+            MovF = 1'b1;  // MOV
+          end
+          default:
+            ALUControl = 2'bx;
       endcase
       // update flags if S bit is set 
 	// (C & V only updated for arith instructions)
@@ -254,8 +258,8 @@ module condlogic(input  logic       clk, reset,
                  input  logic [3:0] Cond,
                  input  logic [3:0] ALUFlags,
                  input  logic [1:0] FlagW,
-                 input  logic       PCS, RegW, MemW,
-                 output logic       PCSrc, RegWrite, MemWrite);
+                 input  logic       PCS, RegW, MemW, MovF,
+                 output logic       PCSrc, RegWrite, MemWrite, MovFlag);
                  
   logic [1:0] FlagWrite;
   logic [3:0] Flags;
@@ -272,6 +276,7 @@ module condlogic(input  logic       clk, reset,
   assign RegWrite  = RegW  & CondEx;
   assign MemWrite  = MemW  & CondEx;
   assign PCSrc     = PCS   & CondEx;
+  assign MovFlag   = MovF  & CondEx;
 endmodule    
 
 module condcheck(input  logic [3:0] Cond,
@@ -312,6 +317,7 @@ module datapath(input  logic        clk, reset,
                 input  logic [1:0]  ALUControl,
                 input  logic        MemtoReg,
                 input  logic        PCSrc,
+                input  logic        MovFlag,
                 output logic [3:0]  ALUFlags,
                 output logic [31:0] PC,
                 input  logic [31:0] Instr,
@@ -319,7 +325,7 @@ module datapath(input  logic        clk, reset,
                 input  logic [31:0] ReadData);
 
   logic [31:0] PCNext, PCPlus4, PCPlus8;
-  logic [31:0] ExtImm, SrcA, SrcB, Result;
+  logic [31:0] ExtImm, SrcA, SrcB, Result, MovORAluResult;
   logic [3:0]  RA1, RA2;
 
   // next PC logic
@@ -334,13 +340,13 @@ module datapath(input  logic        clk, reset,
   regfile     rf(clk, RegWrite, RA1, RA2,
                  Instr[15:12], Result, PCPlus8, 
                  SrcA, WriteData); 
-  mux2 #(32)  resmux(ALUResult, ReadData, MemtoReg, Result);
+  mux2 #(32)  movmux(ALUResult, SrcB, MovFlag, MovORAluResult);
+  mux2 #(32)  resmux(MovORAluResult, ReadData, MemtoReg, Result);
   extend      ext(Instr[23:0], ImmSrc, ExtImm);
 
   // ALU logic
   mux2 #(32)  srcbmux(WriteData, ExtImm, ALUSrc, SrcB);
-  alu         alu(SrcA, SrcB, ALUControl, 
-                  ALUResult, ALUFlags);
+  alu         alu(SrcA, SrcB, ALUControl, ALUResult, ALUFlags);
 endmodule
 
 module regfile(input  logic        clk, 

@@ -1,0 +1,12 @@
+# ignore ALL files starting with "_"
+_*
+
+# ignore ModelSim project files
+*.mti
+*.mpf
+
+# ignore ModelSim console Output
+transcript
+
+# ignore ModelSim Simulation files
+*.wlf

@@ -195,46 +195,57 @@ module decoder(input  logic [1:0] Op,
   
   always_comb
   	case(Op)
-  	                        // Data processing immediate
-  	  2'b00: if (Funct[5])  controls = 10'b0000101001; 
-  	                        // Data processing register
-  	         else           controls = 10'b0000001001; 
-  	                        // LDR
-  	  2'b01: if (Funct[0])  controls = 10'b0001111000; 
-  	                        // STR
-  	         else           controls = 10'b1001110100; 
-  	                        // B
-  	  2'b10:                controls = 10'b0110100010; 
-  	                        // Unimplemented
-  	  default:              controls = 10'bx;          
-  	endcase
+  	  2'b00:  begin
+                if (Funct[5])  
+                  controls = 10'b0000101001;  // Data processing immediate
+                else  
+                  controls = 10'b0000001001;  // Data processing register
 
-  assign {RegSrc, ImmSrc, ALUSrc, MemtoReg, 
-          RegW, MemW, Branch, ALUOp} = controls; 
+                if (Funct[4:1] == 4'b1010 | Funct[4:1] == 4'b1000)  // 
+                  controls[3] = 1'b0;
+              end
+
+  	  2'b01:  if (Funct[0])  
+                controls = 10'b0001111000; // LDR
+  	          else           
+                controls = 10'b1001110100; // STR
+  	                        
+  	  2'b10:    controls = 10'b0110100010; // B
+  	                        
+  	  default:  controls = 10'bx; // Unimplemented    
+  	endcase
           
   // ALU Decoder             
   always_comb
-    if (ALUOp) begin                 // which DP Instr?
+    if (ALUOp) begin  // which DP Instr?
       case(Funct[4:1]) 
-          4'b0100: begin
-            ALUControl = 2'b00; // ADD
+          4'b0100: begin  // ADD
+            ALUControl = 2'b00; 
             MovF = 1'b0;
           end
-          4'b0010: begin
-            ALUControl = 2'b01; // SUB
+          4'b0010: begin  // SUB
+            ALUControl = 2'b01; 
             MovF = 1'b0;
           end
-          4'b0000: begin
-            ALUControl = 2'b10; // AND
+          4'b0000: begin  // AND
+            ALUControl = 2'b10; 
             MovF = 1'b0;
           end
-          4'b1100: begin
-            ALUControl = 2'b11; // ORR
+          4'b1100: begin  // ORR
+            ALUControl = 2'b11; 
             MovF = 1'b0;
           end
-          4'b1101: begin
+          4'b1101: begin  // MOV
             ALUControl = 2'bx;
-            MovF = 1'b1;  // MOV
+            MovF = 1'b1;  
+          end
+          4'b1010: begin  // CMP
+            ALUControl = 2'b01; 
+            MovF = 1'b0;
+          end
+          4'b1000: begin  // TST
+            ALUControl = 2'b10;
+            MovF = 1'b0;
           end
           default:
             ALUControl = 2'bx;
@@ -242,13 +253,16 @@ module decoder(input  logic [1:0] Op,
       // update flags if S bit is set 
 	// (C & V only updated for arith instructions)
       FlagW[1]      = Funct[0]; // FlagW[1] = S-bit
-	// FlagW[0] = S-bit & (ADD | SUB)
+	// FlagW[0] = S-bit & (ADD/TST | SUB/COMP)
       FlagW[0]      = Funct[0] & 
-        (ALUControl == 2'b00 | ALUControl == 2'b01); 
+        (ALUControl == 2'b00 | ALUControl == 2'b01);
     end else begin
       ALUControl = 2'b00; // add for non-DP instructions
       FlagW      = 2'b00; // don't update Flags
     end
+
+  assign {RegSrc, ImmSrc, ALUSrc, MemtoReg, 
+        RegW, MemW, Branch, ALUOp} = controls; 
               
   // PC Logic
   assign PCS  = ((Rd == 4'b1111) & RegW) | Branch; 

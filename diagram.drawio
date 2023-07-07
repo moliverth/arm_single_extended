@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net" modified="2023-07-06T19:24:53.295Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36" etag="-Tc_16QsGPNFwMpnL-r9" version="21.6.1" type="github">
+<mxfile host="app.diagrams.net" modified="2023-07-07T00:27:39.535Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36" etag="zaDybCoktEY6yBJiBQMd" version="21.6.1" type="github">
   <diagram name="Página-1" id="vVoyAeHp4Rk1YM-1fCIQ">
-    <mxGraphModel dx="2783" dy="2227" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1805" dy="1698" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -469,7 +469,7 @@
             <mxPoint as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="FmY12MPKPxn2fFbcgKqL-146" value="ALUControl[1:0]" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.92;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;align=left;" edge="1" parent="1" source="FmY12MPKPxn2fFbcgKqL-54" target="FmY12MPKPxn2fFbcgKqL-119">
+        <mxCell id="FmY12MPKPxn2fFbcgKqL-146" value="&lt;font color=&quot;#ffae00&quot;&gt;ALUControl[2:0]&lt;/font&gt;" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.92;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;align=left;fillColor=#ffe6cc;strokeColor=#d79b00;" edge="1" parent="1" source="FmY12MPKPxn2fFbcgKqL-54" target="FmY12MPKPxn2fFbcgKqL-119">
           <mxGeometry x="-0.985" relative="1" as="geometry">
             <Array as="points">
               <mxPoint x="200" y="130" />
@@ -549,7 +549,7 @@
         <mxCell id="FmY12MPKPxn2fFbcgKqL-116" value="&lt;div style=&quot;font-family: Consolas, &amp;quot;Courier New&amp;quot;, monospace; font-weight: normal; font-size: 14px; line-height: 19px;&quot;&gt;b&lt;/div&gt;" style="text;whiteSpace=wrap;html=1;labelBackgroundColor=none;fontColor=#000000;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="600" y="270" width="60" height="25" as="geometry" />
         </mxCell>
-        <mxCell id="FmY12MPKPxn2fFbcgKqL-119" value="ALUControl" style="text;whiteSpace=wrap;html=1;labelBackgroundColor=none;fontColor=#000000;verticalAlign=middle;" vertex="1" parent="1">
+        <mxCell id="FmY12MPKPxn2fFbcgKqL-119" value="&lt;font color=&quot;#ffbb00&quot;&gt;ALUControl&lt;/font&gt;" style="text;whiteSpace=wrap;html=1;labelBackgroundColor=none;fontColor=#000000;verticalAlign=middle;" vertex="1" parent="1">
           <mxGeometry x="610" y="230" width="60" height="15" as="geometry" />
         </mxCell>
         <mxCell id="FmY12MPKPxn2fFbcgKqL-129" value="ExtImm[31:0]" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.25;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;align=left;" edge="1" parent="1" source="FmY12MPKPxn2fFbcgKqL-122" target="FmY12MPKPxn2fFbcgKqL-127">

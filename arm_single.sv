@@ -39,7 +39,7 @@
 //                  [20]:    L (1 for LDR, 0 for STR)
 //   Instr[19:16] = rn
 //   Instr[15:12] = rd
-//   Instr[11:0]  = imm12 (zero extended)
+//   Instr[11:0]  = imm12 (zero extended)  
 //
 // Branch instruction (PC <= PC + offset, PC holds 8 bytes past Branch Instr)
 //   B
@@ -102,24 +102,57 @@ module top(input  logic        clk, reset,
            output logic        MemWrite);
 
   logic [31:0] PC, Instr, ReadData;
+  logic        ByteFlag;
   
   // instantiate processor and memories
-  arm arm(clk, reset, PC, Instr, MemWrite, DataAdr, 
-          WriteData, ReadData);
+  arm arm(clk, reset, PC, Instr, MemWrite, ByteFlag,
+          DataAdr, WriteData, ReadData);
   imem imem(PC, Instr);
-  dmem dmem(clk, MemWrite, DataAdr, WriteData, ReadData);
+  dmem dmem(clk, MemWrite, ByteFlag, DataAdr, WriteData, ReadData);
 endmodule
 
-module dmem(input  logic        clk, we,
+module dmem(input  logic        clk, we, ByteFlag,
             input  logic [31:0] a, wd,
             output logic [31:0] rd);
 
   logic [31:0] RAM[63:0];
 
-  assign rd = RAM[a[31:2]]; // word aligned
+  always_comb
+    if (ByteFlag)
+      case(a % 3'b100) 
+        2'b00:  begin // already aligned
+                  assign rd = {24'b0, RAM[a[31:2]][7:0]}; 
+                end
+        2'b01:  begin // 1-byte shift
+                  assign rd = {24'b0, RAM[a[31:2]][15:8]}; 
+                end
+        2'b10:  begin // 2-byte shift
+                  assign rd = {24'b0, RAM[a[31:2]][23:16]}; 
+                end 
+        2'b11:  begin // 3-byte shift
+                  assign rd = {24'b0, RAM[a[31:2]][31:24]}; 
+                end
+      endcase
+    else assign rd = RAM[a[31:2]];
 
-  always_ff @(posedge clk)
-    if (we) RAM[a[31:2]] <= wd;
+always_ff @(posedge clk)
+  if (we)
+    if (ByteFlag)
+      case(a % 3'b100) 
+        2'b00:  begin // already aligned
+                  RAM[a[31:2]] <= {RAM[a[31:2]][31:8], wd[7:0]};
+                end
+        2'b01:  begin // 1-byte shift
+                  RAM[a[31:2]] <= {RAM[a[31:2]][31:16], wd[7:0], RAM[a[31:2]][7:0]};
+                end
+        2'b10:  begin // 2-byte shift
+                  RAM[a[31:2]] <= {RAM[a[31:2]][31:24], wd[7:0], RAM[a[31:2]][15:0]};
+                end 
+        2'b11:  begin // 3-byte shift
+                  RAM[a[31:2]] <= {wd[7:0], RAM[a[31:2]][23:0]};
+                end
+      endcase
+    else RAM[a[31:2]] <= wd;
 endmodule
 
 module imem(input  logic [31:0] a,
@@ -136,7 +169,7 @@ endmodule
 module arm(input  logic        clk, reset,
            output logic [31:0] PC,
            input  logic [31:0] Instr,
-           output logic        MemWrite,
+           output logic        MemWrite, ByteFlag,
            output logic [31:0] ALUResult, WriteData,
            input  logic [31:0] ReadData);
 
@@ -149,7 +182,7 @@ module arm(input  logic        clk, reset,
   controller c(clk, reset, Instr[31:12], ALUFlags, 
                RegSrc, RegWrite, ImmSrc, 
                ALUSrc, ALUControl,
-               MemWrite, MemtoReg, MovFlag, PCSrc);
+               MemWrite, ByteFlag, MemtoReg, MovFlag, PCSrc);
   datapath dp(clk, reset, 
               RegSrc, RegWrite, ImmSrc,
               ALUSrc, ALUControl,
@@ -166,7 +199,7 @@ module controller(input  logic         clk, reset,
                   output logic [1:0]   ImmSrc,
                   output logic         ALUSrc, 
                   output logic [2:0]   ALUControl,
-                  output logic         MemWrite, MemtoReg,
+                  output logic         MemWrite, ByteFlag, MemtoReg,
                   output logic         MovFlag,
                   output logic         PCSrc);
 
@@ -174,7 +207,7 @@ module controller(input  logic         clk, reset,
   logic       PCS, RegW, MemW, MovF;
   
   decoder dec(Instr[27:26], Instr[25:20], Instr[15:12],
-              FlagW, PCS, RegW, MemW,
+              FlagW, PCS, RegW, MemW, ByteFlag,
               MemtoReg, ALUSrc, MovF, ImmSrc, RegSrc, ALUControl);
   condlogic cl(clk, reset, Instr[31:28], ALUFlags,
                FlagW, PCS, RegW, MemW, MovF, 
@@ -185,7 +218,7 @@ module decoder(input  logic [1:0] Op,
                input  logic [5:0] Funct,
                input  logic [3:0] Rd,
                output logic [1:0] FlagW,
-               output logic       PCS, RegW, MemW,
+               output logic       PCS, RegW, MemW, ByteFlag,
                output logic       MemtoReg, ALUSrc, MovF,
                output logic [1:0] ImmSrc, RegSrc, 
                output logic [2:0] ALUControl);
@@ -193,8 +226,13 @@ module decoder(input  logic [1:0] Op,
   logic [9:0] controls;
   logic       Branch, ALUOp;
 
+  assign {RegSrc, ImmSrc, ALUSrc, MemtoReg, 
+      RegW, MemW, Branch, ALUOp} = controls; 
+    
+  // PC Logic
+  assign PCS  = ((Rd == 4'b1111) & RegW) | Branch; 
+
   // Main Decoder
-  
   always_comb
   	case(Op)
   	  2'b00:  begin
@@ -207,11 +245,17 @@ module decoder(input  logic [1:0] Op,
                   controls[3] = 1'b0; // disable RegW
               end
 
-  	  2'b01:  if (Funct[0])  
-                controls = 10'b0001111000; // LDR
-  	          else           
-                controls = 10'b1001110100; // STR
-  	                        
+  	  2'b01:  begin
+                if (Funct[0])  
+                  controls = 10'b0001111000; // LDR
+                else           
+                  controls = 10'b1001110100; // STR
+                if (Funct[2]) // LDR or STR Byte
+                  ByteFlag = 1'b1;
+                else
+                  ByteFlag = 1'b0;
+              end
+                                
   	  2'b10:    controls = 10'b0110100010; // B
   	                        
   	  default:  controls = 10'bx; // Unimplemented    
@@ -266,11 +310,6 @@ module decoder(input  logic [1:0] Op,
       FlagW      = 3'b000; // don't update Flags
     end
 
-  assign {RegSrc, ImmSrc, ALUSrc, MemtoReg, 
-        RegW, MemW, Branch, ALUOp} = controls; 
-              
-  // PC Logic
-  assign PCS  = ((Rd == 4'b1111) & RegW) | Branch; 
 endmodule
 
 module condlogic(input  logic       clk, reset,
@@ -394,12 +433,9 @@ module extend(input  logic [23:0] Instr,
  
   always_comb
     case(ImmSrc) 
-               // 8-bit unsigned immediate
-      2'b00:   ExtImm = {24'b0, Instr[7:0]};  
-               // 12-bit unsigned immediate 
-      2'b01:   ExtImm = {20'b0, Instr[11:0]}; 
-               // 24-bit two's complement shifted branch 
-      2'b10:   ExtImm = {{6{Instr[23]}}, Instr[23:0], 2'b00}; 
+      2'b00:   ExtImm = {24'b0, Instr[7:0]};  // 8-bit unsigned immediate
+      2'b01:   ExtImm = {20'b0, Instr[11:0]}; // 12-bit unsigned immediate (LDR/STR)
+      2'b10:   ExtImm = {{6{Instr[23]}}, Instr[23:0], 2'b00}; // 24-bit two's complement shifted branch 
       default: ExtImm = 32'bx; // undefined
     endcase             
 endmodule

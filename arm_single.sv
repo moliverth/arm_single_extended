@@ -282,43 +282,25 @@ module decoder(input  logic [1:0] Op,
   // ALU Decoder             
   always_comb
     if (ALUOp) begin  // which DP Instr?
-      case(Funct[4:1]) 
-          4'b0100: begin  // ADD
-            ALUControl = 3'b000; 
-            MovF = 1'b0;
-          end
-          4'b0010: begin  // SUB
-            ALUControl = 3'b001; 
-            MovF = 1'b0;
-          end
-          4'b0000: begin  // AND
-            ALUControl = 3'b010; 
-            MovF = 1'b0;
-          end
-          4'b1100: begin  // ORR
-            ALUControl = 3'b011; 
-            MovF = 1'b0;
-          end
-          4'b0001: begin  // EOR 
-            ALUControl = 3'b111; 
-            MovF = 1'b0;
-          end
-          4'b1101: begin  // MOV
+      if (Funct[4:1] ==  4'b1101) begin  // MOV
             ALUControl = 3'bx;
             MovF = 1'b1;  
           end
-          4'b1010: begin  // CMP
-            ALUControl = 3'b001; // same ALU OP as SUB
-            MovF = 1'b0;
-          end
-          4'b1000: begin  // TST
-            ALUControl = 3'b010; // same ALU OP as AND
-            MovF = 1'b0;
-          end
-          default:
-            ALUControl = 3'bx;
-      endcase
-      // update flags if S bit is set 
+      else begin
+        MovF = 1'b0;
+        case(Funct[4:1]) 
+            4'b0100: ALUControl = 3'b000;  // ADD
+            4'b0010: ALUControl = 3'b001;  // SUB
+            4'b0000: ALUControl = 3'b010;  // AND
+            4'b1100: ALUControl = 3'b011;  // ORR
+            4'b0001: ALUControl = 3'b111;  // EOR 
+            4'b1010: ALUControl = 3'b001;  // CMP
+            4'b1000: ALUControl = 3'b010;  // TST
+            default:
+              ALUControl = 3'bx;
+        endcase
+      end
+  // update flags if S bit is set 
 	// (C & V only updated for arith instructions)
       FlagW[1]      = Funct[0]; // FlagW[1] = S-bit
 	// FlagW[0] = S-bit & (ADD/TST | SUB/COMP)

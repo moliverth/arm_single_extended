@@ -1,77 +1,82 @@
-// arm_single.sv
-// David_Harris@hmc.edu and Sarah_Harris@hmc.edu 25 June 2013
-// Single-cycle implementation of a subset of ARMv4
-// 
-// run 210
-// Expect simulator to print "Simulation succeeded"
-// when the value 7 is written to address 100 (0x64)
+/* 
+base code from:
+  David_Harris@hmc.edu and Sarah_Harris@hmc.edu 25 June 2013
+  Single-cycle implementation of a subset of ARMv4
 
-// 16 32-bit registers
-// Data-processing instructions
-//   ADD, SUB, AND, ORR
-//   INSTR<cond><S> rd, rn, #immediate
-//   INSTR<cond><S> rd, rn, rm
-//    rd <- rn INSTR rm	      if (S) Update Status Flags
-//    rd <- rn INSTR immediate	if (S) Update Status Flags
-//   Instr[31:28] = cond
-//   Instr[27:26] = op = 00
-//   Instr[25:20] = funct
-//                  [25]:    1 for immediate, 0 for register
-//                  [24:21]: 0100 (ADD) / 0010 (SUB) /
-//                           0000 (AND) / 1100 (ORR)
-//                  [20]:    S (1 = update CPSR status Flags)
-//   Instr[19:16] = rn
-//   Instr[15:12] = rd
-//   Instr[11:8]  = 0000
-//   Instr[7:0]   = imm8      (for #immediate type) / 
-//                  {0000,rm} (for register type)
-//   
-// Load/Store instructions
-//   LDR, STR
-//   INSTR rd, [rn, #offset]
-//    LDR: rd <- Mem[rn+offset]
-//    STR: Mem[rn+offset] <- rd
-//   Instr[31:28] = cond
-//   Instr[27:26] = op = 01 
-//   Instr[25:20] = funct
-//                  [25]:    0 (A)
-//                  [24:21]: 1100 (P/U/B/W)
-//                  [20]:    L (1 for LDR, 0 for STR)
-//   Instr[19:16] = rn
-//   Instr[15:12] = rd
-//   Instr[11:0]  = imm12 (zero extended)  
-//
-// Branch instruction (PC <= PC + offset, PC holds 8 bytes past Branch Instr)
-//   B
-//   B target
-//    PC <- PC + 8 + imm24 << 2
-//   Instr[31:28] = cond
-//   Instr[27:25] = op = 10
-//   Instr[25:24] = funct
-//                  [25]: 1 (Branch)
-//                  [24]: 0 (link)
-//   Instr[23:0]  = imm24 (sign extend, shift left 2)
-//   Note: no Branch delay slot on ARM
-//
-// Other:
-//   R15 reads as PC+8
-//   Conditional Encoding
-//    cond  Meaning                       Flag
-//    0000  Equal                         Z = 1
-//    0001  Not Equal                     Z = 0
-//    0010  Carry Set                     C = 1
-//    0011  Carry Clear                   C = 0
-//    0100  Minus                         N = 1
-//    0101  Plus                          N = 0
-//    0110  Overflow                      V = 1
-//    0111  No Overflow                   V = 0
-//    1000  Unsigned Higher               C = 1 & Z = 0
-//    1001  Unsigned Lower/Same           C = 0 | Z = 1
-//    1010  Signed greater/equal          N = V
-//    1011  Signed less                   N != V
-//    1100  Signed greater                N = V & Z = 0
-//    1101  Signed less/equal             N != V | Z = 1
-//    1110  Always                        any
+original instructions set: ADD, SUB, AND, ORR, LDR, STR e B.
+registers: 16 32-bit
+
+extended instructions: MOV, CMP, TST, EOR, LDRB, STRB e BL.
+
+Data-processing instructions
+  ADD, SUB, AND, ORR, MOV, CMP, TST, EOR.
+  INSTR<cond><S> rd, rn, #immediate
+  INSTR<cond><S> rd, rn, rm
+    rd <- rn INSTR rm	      if (S) Update Status Flags
+    rd <- rn INSTR immediate	if (S) Update Status Flags
+  Instr[31:28] = cond
+  Instr[27:26] = op = 00
+  Instr[25:20] = funct
+      [25]:    1 for immediate, 0 for register
+      [24:21]: 0100 (ADD) / 0010 (SUB) / 0000 (AND) / 1100 (ORR)
+      [20]:    S (1 = update CPSR status Flags)
+  Instr[19:16] = rn
+  Instr[15:12] = rd
+  Instr[11:8]  = 0000
+  Instr[7:0]   = imm8   (for #immediate type) / {0000,rm} (for register type)
+
+Load/Store instructions
+  LDR, LDRB, STR, STRB
+  INSTR rd, [rn, #offset]
+
+  LDR: rd <- Mem[rn+offset]
+  STR: Mem[rn+offset] <- rd
+
+  Instr[31:28] = cond
+  Instr[27:26] = op = 01 
+  Instr[25:20] = funct
+    [25]:    0 (A)
+    [24:21]: 1100 (P/U/B/W)
+    [20]:    L (1 for LDR, 0 for STR)
+  Instr[19:16] = rn
+  Instr[15:12] = rd
+  Instr[11:0]  = imm12 (zero extended)  
+
+Branch instruction (PC <= PC + offset, PC holds 8 bytes past Branch Instr)
+  B, BL.
+  B  target: PC <- PC + 8 + imm24 << 2
+  BL target: same as B and r14 <- r15
+
+  Instr[31:28] = cond
+  Instr[27:25] = op = 10
+  Instr[25:24] = funct
+    [25]: 1 (Branch)
+    [24]: 0 (link)
+  Instr[23:0]  = imm24 (sign extend, shift left 2)
+  Note: no Branch delay slot on ARM
+
+Other:
+  R15 reads as PC+8
+  
+  Conditional Encoding:
+    cond  Meaning                       Flag
+    0000  Equal                         Z = 1
+    0001  Not Equal                     Z = 0
+    0010  Carry Set                     C = 1
+    0011  Carry Clear                   C = 0
+    0100  Minus                         N = 1
+    0101  Plus                          N = 0
+    0110  Overflow                      V = 1
+    0111  No Overflow                   V = 0
+    1000  Unsigned Higher               C = 1 & Z = 0
+    1001  Unsigned Lower/Same           C = 0 | Z = 1
+    1010  Signed greater/equal          N = V
+    1011  Signed less                   N != V
+    1100  Signed greater                N = V & Z = 0
+    1101  Signed less/equal             N != V | Z = 1
+    1110  Always                        any
+*/
+
 
 module testbench();
 
@@ -245,8 +250,9 @@ module decoder(input  logic [1:0] Op,
                 if (Funct[4:1] == 4'b1010 | Funct[4:1] == 4'b1000)  // CMP and TST
                   controls[3] = 1'b0; // disable RegW
 
+                // "dont care" for other OPs Flags
                 ByteFlag = 1'bx;
-                LinkF = 1'bx; // Don't update LR with PC+4
+                LinkF = 1'bx;
               end
 
   	  2'b01:  begin
@@ -255,27 +261,27 @@ module decoder(input  logic [1:0] Op,
                 else           
                   controls = 10'b1001110100; // STR
                 if (Funct[2]) // LDRB and STRB
-                  ByteFlag = 1'bx;
+                  ByteFlag = 1'b1;
                 else
-                  ByteFlag = 1'bx;
+                  ByteFlag = 1'b0;
 
                 LinkF = 1'bx;
               end
 
   	  2'b10:  begin
-                //b  0x8 (0x8: count) - eafffffa - 1110 1010 1111 1111 1111 1111 1111 1010
-                //bl 0x8 (0x8: count) - ebfffffb - 1110 1011 1111 1111 1111 1111 1111 1011
                 controls = 10'b0110100010;
                 if (Funct[4])  // BL
                   LinkF = 1'b1;
                 else  // B
-                  LinkF = 1'bx;
+                  LinkF = 1'b0;
 
                 ByteFlag = 1'bx;
               end   
 
   	  default: begin  
-                  controls = 10'bx; // Unimplemented    
+                  controls = 10'bx; // Unimplemented 
+                  ByteFlag = 1'bx;  
+                  LinkF = 1'bx; 
                end
   	endcase
  
@@ -300,16 +306,17 @@ module decoder(input  logic [1:0] Op,
               ALUControl = 3'bx;
         endcase
       end
-  // update flags if S bit is set 
-	// (C & V only updated for arith instructions)
+
+      // update flags if S bit is set 
+	    // (C & V only updated for arith instructions)
       FlagW[1]      = Funct[0]; // FlagW[1] = S-bit
-	// FlagW[0] = S-bit & (ADD/TST | SUB/COMP)
+	    // FlagW[0] = S-bit & (ADD | TST | SUB | COMP)
       FlagW[0]      = Funct[0] & (ALUControl == 3'b000 | ALUControl == 3'b001);
+      
     end else begin
       ALUControl = 3'b000; // add for non-DP instructions
       FlagW      = 3'b000; // don't update Flags
     end
-
 endmodule
 
 module condlogic(input  logic       clk, reset,
@@ -417,11 +424,13 @@ module regfile(input  logic        clk,
                output logic [31:0] rd1, rd2);
 
   logic [31:0] rf[14:0];
-
-  // three ported register file
-  // read two ports combinationally
-  // write third port on rising edge of clock
-  // register 15 reads PC+8 instead
+  /*
+    three ported register file
+    read two ports combinationally
+    write third port on rising edge of clock
+    register 15 reads PC+8 instead
+    lflag (Branch Linked) -> register 14 reads PC+8
+  */
 
   always_ff @(posedge clk)
     if (lflag) rf[14] <= r15;

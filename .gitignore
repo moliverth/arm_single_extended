@@ -7,7 +7,7 @@ _*
 
 # ignore ModelSim console Output
 transcript
-wlft64sm4g
 
 # ignore ModelSim Simulation files
 *.wlf
+wlft*

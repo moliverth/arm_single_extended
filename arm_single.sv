@@ -45,7 +45,7 @@ Load/Store instructions
 Branch instruction (PC <= PC + offset, PC holds 8 bytes past Branch Instr)
   B, BL.
   B  target: PC <- PC + 8 + imm24 << 2
-  BL target: same as B and r14 <- r15
+  BL (link): also LR <- PC+4
 
   Instr[31:28] = cond
   Instr[27:25] = op = 10
@@ -429,11 +429,11 @@ module regfile(input  logic        clk,
     read two ports combinationally
     write third port on rising edge of clock
     register 15 reads PC+8 instead
-    lflag (Branch Linked) -> register 14 reads PC+8
+    lflag (Branch Linked) -> register 14 reads PC+4
   */
 
   always_ff @(posedge clk)
-    if (lflag) rf[14] <= r15;
+    if (lflag) rf[14] <= r15 - 3'b100;
 
   always_ff @(posedge clk)
     if (we3) rf[wa3] <= wd3;	
@@ -519,5 +519,3 @@ module alu(input  logic [31:0] a, b,
                     (a[31] ^ sum[31]); 
   assign ALUFlags    = {neg, zero, carry, overflow};
 endmodule
-
-

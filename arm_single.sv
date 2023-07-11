@@ -79,50 +79,85 @@ Other:
 
 
 module testbench();
+  parameter real clk_frequency = 1e6; // 1 Mhz.
+  parameter real clk_period = (1e12/clk_frequency); // 1e12 correspound to 1 sec in real datatype scale.
+  
+  logic clk = 0;
+  logic reset;
 
-  logic        clk;
-  logic        reset;
-
+  // instantiate arm device to be tested
   logic [31:0] WriteData, DataAdr;
   logic        MemWrite;
+  top dut(clk, reset, WriteData, DataAdr, MemWrite, twarn);
 
-  // instantiate device to be tested
-  top dut(clk, reset, WriteData, DataAdr, MemWrite);
-  
   // initialize test
   initial
     begin
-      reset <= 1; # 22; reset <= 0;
+      reset <= 1; #(clk_period/2); reset <= 0;
+    end
+
+  // stop simulation when warn from time io device 
+  always @ (twarn)
+    if (twarn) begin
+      $stop;
     end
 
   // generate clock to sequence tests
-  always
-    begin
-      clk <= 1; # 5; clk <= 0; # 5;
-    end
+  always begin
+    #(clk_period/2) clk = ~clk;
+  end
 endmodule
 
 module top(input  logic        clk, reset, 
            output logic [31:0] WriteData, DataAdr, 
-           output logic        MemWrite);
+           output logic        MemWrite, twarn);
+  /*
+    TIMER i/o DEVICE
+    TIMESTAMP   (in micro seconds) -> RAM[60] => "0xf0" (LDR)
+    TIMER INPUT (in micro seconds) -> RAM[59] => "0xec" (STR)
+    TIMER OUTPUT FLAGS -------------> RAM[58] => "0xe8" (LDRB)
+      #0 RAM[58][0]   warn (return 1 if a set timer has been reached)
+      
+    TIMER CONTROL FLAGS ------------> RAM[57] => "0xe4" (STRB)
+      #0 RAM[57][7:0]   reset_timer
+      #1 RAM[57][15:8]  enable_clock 
+      #2 RAM[57][23:16] reset_timestamp
+      #3 RAM[57][31:24] unimplemented
+  */
+  logic [63:0] timestamp;
+  logic [63:0] timer_input;
+  logic reset_timer, enable_clock, reset_timestamp;
+  logic [2:0]  tctrl;
+  assign {reset_timer, enable_clock, reset_timestamp} = tctrl;
+  timer timer(clk, enable_clock, reset_timestamp, reset_timer, 
+              timer_input, twarn, timestamp);
 
+  // instantiate processor and memories
   logic [31:0] PC, Instr, ReadData;
   logic        ByteFlag;
   
-  // instantiate processor and memories
   arm arm(clk, reset, PC, Instr, MemWrite, ByteFlag,
           DataAdr, WriteData, ReadData);
   imem imem(PC, Instr);
-  dmem dmem(clk, MemWrite, ByteFlag, DataAdr, WriteData, ReadData);
+  dmem dmem(clk, MemWrite, ByteFlag, DataAdr, WriteData, ReadData, 
+            tctrl, timer_input, timestamp, twarn);
 endmodule
 
 module dmem(input  logic        clk, we, ByteFlag,
             input  logic [31:0] a, wd,
-            output logic [31:0] rd);
-
+            output logic [31:0] rd, 
+            output logic [2:0]  tctrl,
+            output logic [63:0] timer_input,
+            input  logic [63:0] timestamp,
+            input  logic        twarn);
+  
   logic [31:0] RAM[63:0];
 
-  always_comb
+  // tctrl[2:0]
+  logic reset_timer, enable_clock, reset_timestamp;
+
+  // READ
+  always_comb begin
     if (ByteFlag)
       case(a % 3'b100) 
         2'b00:  begin // already aligned
@@ -140,7 +175,16 @@ module dmem(input  logic        clk, we, ByteFlag,
       endcase
     else assign rd = RAM[a[31:2]];
 
-always_ff @(posedge clk)
+    // Timer Driver
+    timer_input     = {32'b0, RAM[59]};
+    reset_timer     = RAM[57][7:0]   | 8'b0;
+    enable_clock    = RAM[57][15:8]  | 8'b0;
+    reset_timestamp = RAM[57][23:16] | 8'b0;
+    tctrl = {reset_timer, enable_clock, reset_timestamp};
+  end
+
+// WRITE
+always_ff @(posedge clk) begin
   if (we)
     if (ByteFlag)
       case(a % 3'b100) 
@@ -158,6 +202,11 @@ always_ff @(posedge clk)
                 end
       endcase
     else RAM[a[31:2]] <= wd;
+
+  // Timer Driver
+  RAM[60] <= timestamp[31:0];
+  RAM[58] <= {24'b0, {7'b0, twarn}};
+end
 endmodule
 
 module imem(input  logic [31:0] a,
